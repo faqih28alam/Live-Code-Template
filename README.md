@@ -9,11 +9,14 @@ Day 8: Product UI (product list for buyer, full CRUD UI for admin)
 Day 9: Cart UI (cart page, add/remove/update items)
 Day 10: Polish (role-based route guards, loading states, error handling)
 
-mini-store/
-├── backend/
-│   ├── src/
-│   │   ├── index.js
-│   │   └── routes/
-│   └── prisma/
-│       └── schema.prisma
-└── frontend/
+
+backend/
+├── prisma/
+│   └── schema.prisma
+├── src/
+│   ├── controllers/
+│   ├── middlewares/
+│   ├── routes/
+│   └── index.js
+├── .env
+└── package.json
