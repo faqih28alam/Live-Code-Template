@@ -63,12 +63,31 @@ code src/models/auth-model.ts               # crtl + S
 code src/utils/jwt.ts                       # crtl + S
 code src/validations/joi.ts                 # crtl + S
 ```
-### 3. Setup Auth (Authentication & Authorization)
-```txt
-1. work with app.ts
-2. work with auth-route.ts
-3. work with auth-controller.ts
-4. work with joi.ts (registerSchema & loginSchema)
-5. work with auth-model.ts
-6. work with jwt.ts & bcrypt
+### 3. Setup Prisma 6
+```bash
+npm i -D prisma@6                           # install prisma version 6; to perform migration, generate etc 
+npm i @prisma/client@6                      # install prisma client; perform Create, Read, Update, Delete (CRUD) to DB
+npx prisma init                             # generate prisma config        
+```
+setup postgreSQL connection
+```text
+1. move prisma config inside .src folder
+2. Create DB
+3. edit DATABASE_URL in .env
+4. edit prisma/schema.prisma
+```
+```env
+DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/DATABASE_NAME?schema=public"
+```
+```prisma.schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model
 ```
