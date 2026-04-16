@@ -62,9 +62,7 @@ code src/models/auth-model.ts               # crtl + S
 code src/utils/jwt.ts                       # crtl + S
 code src/validations/joi.ts                 # crtl + S
 ```
-```bash
-npm run dev                                 # run backend server (edit package.json & tsconfig.json first)
-```
+
 ### 3. Setup Prisma 6
 ```bash
 npm i -D prisma@6                           # install prisma version 6; to perform migration, generate etc 
