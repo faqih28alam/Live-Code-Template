@@ -14,7 +14,7 @@ Day 10: Polish (role-based route guards, loading states, error handling)
 ```
 backend/
 ├── prisma/
-│   └── schema.prisma
+│   └── schema.prisma       ← define all models here
 ├── src/
 │   ├── app.ts
 │   ├── models/
@@ -31,55 +31,11 @@ backend/
 └── tsconfig.json
 ```
 
-## 🚀 Getting Started Day-1
-### 1. Setup Express with Typescript
+## 🚀 Getting Started Day-2
+### 1. Define Prisma Schema
 
-```bash
-mkdir backend                                   # create backend folder
-cd backend                                      # go inside backend folder
-npm init -y                                     # create package.json as project dependencies blueprint
-npm i express                                   # install express framework
-npm i -D typescript ts-node-dev @types/express  # install & configure typscript
-npx tsc  --init                                 # make typescript work
-```
-edit package.json & tsconfig.json
-```json
-// package.json
-"dev": "ts-node-dev --respawn src/app.ts",
-```
-```json
-// tsconfig.json
-"rootDir": "./src"
-//uncommand this line, so it be like:
-// "verbatimModuleSyntax": true,
-```
-### 2. Setup Project Structure
-```bash
-code src/app.ts                             # crtl + S
-code src/routes/auth-route.ts               # crtl + S
-code src/controllers/auth-controller.ts     # crtl + S
-code src/models/auth-model.ts               # crtl + S
-code src/utils/jwt.ts                       # crtl + S
-code src/validations/joi.ts                 # crtl + S
-```
-
-### 3. Setup Prisma 6
-```bash
-npm i -D prisma@6                           # install prisma version 6; to perform migration, generate etc 
-npm i @prisma/client@6                      # install prisma client; perform Create, Read, Update, Delete (CRUD) to DB
-npx prisma init                             # generate prisma config        
-```
-setup postgreSQL connection
-```text
-1. move prisma config inside .src folder
-2. Create DB
-3. edit DATABASE_URL in .env
-4. edit prisma/schema.prisma
-```
-```env
-DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/DATABASE_NAME?schema=public"
-```
-```prisma.schema
+edit `prisma/schema.prisma`
+```prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -89,5 +45,82 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model
+enum Role {
+  ADMIN
+  BUYER
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(BUYER)
+  cart      Cart?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Product {
+  id          Int        @id @default(autoincrement())
+  name        String
+  description String?
+  price       Float
+  stock       Int        @default(0)
+  image       String?
+  cartItems   CartItem[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model Cart {
+  id        Int        @id @default(autoincrement())
+  userId    Int        @unique
+  user      User       @relation(fields: [userId], references: [id])
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model CartItem {
+  id        Int      @id @default(autoincrement())
+  cartId    Int
+  cart      Cart     @relation(fields: [cartId], references: [id])
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id])
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
 ```
+### 2. Run Migration
+```bash
+npx prisma migrate dev --name init      # create migration file + apply to DB
+npx prisma generate                     # generate Prisma Client from schema so Code will understand the context
+```
+
+### 3. Setup Prisma Client (singleton)
+
+create `src/utils/prisma.ts`
+```ts
+// singleton pattern: reuse one PrismaClient instance across the app
+import { PrismaClient } from '@prisma/client'
+
+const prisma = new PrismaClient()
+
+export default prisma
+```
+
+### 4. Verify with Prisma Studio
+```bash
+npx prisma studio       # opens browser UI at localhost:5555 to inspect DB tables
+```
+
+
+
+### 📝 Note: If Database Already Exists
+```bash
+npx prisma db pull      # introspect existing DB → auto-update schema.prisma
+npx prisma generate     # regenerate Prisma Client from updated schema
+```
+> Use this instead of `migrate dev` when the DB tables are already created externally.
