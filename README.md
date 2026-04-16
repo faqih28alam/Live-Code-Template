@@ -29,39 +29,8 @@ backend/
 └── tsconfig.json
 ```
 
-## 🚀 Getting Started Day-1
-### 1. Setup Express with Typescript
-
-```bash
-mkdir backend                                   # create backend folder
-cd backend                                      # go inside backend folder
-npm init -y                                     # create package.json as project dependencies blueprint
-npm i express                                   # install express framework
-npm i -D typscript ts-node-dev @types/express   # install & configure typscript
-npx tsc  --init                                 # make typescript work
-npm run dev                                     # run backend server
-```
-edit package.json & tsconfig.json
-```json
-// package.json
-"dev": "ts-node-dev --respawn src/app.ts"
-```
-```json
-// tsconfig.json
-"rootDir": "./src"
-//uncommand this line, so it be like:
-// "verbatimModuleSyntax": true,
-```
-### 2. Setup Project Structure
-```bash
-code src/app.ts                             # crtl + S
-code src/routes/auth-route.ts               # crtl + S
-code src/controllers/auth-controller.ts     # crtl + S
-code src/models/auth-model.ts               # crtl + S
-code src/utils/jwt.ts                       # crtl + S
-code src/validations/joi.ts                 # crtl + S
-```
-### 3. Setup Auth (Authentication & Authorization)
+## 🚀 Getting Started Day-3
+### 1. Setup Auth (Authentication & Authorization)
 ```txt
 1. work with app.ts
 2. work with auth-route.ts
