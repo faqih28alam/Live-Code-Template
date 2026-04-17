@@ -14,19 +14,26 @@ Day 10: Polish (role-based route guards, loading states, error handling)
 ```
 backend/
 ├── prisma/
-│   └── schema.prisma       ← define all models here
+│   └── schema.prisma       
 ├── src/
 │   ├── app.ts
 │   ├── models/
+│   │   └── auth-model.ts
 │   ├── controllers/
+│   │   └── auth-controller.ts
 │   ├── routes/
+│   │   └── auth-route.ts
 │   ├── middlewares/
+│   │   ├── auth-middleware.ts
+│   │   └── cors.ts
 │   ├── validations/
 │   │   └── joi.ts       
 │   ├── utils/
-│   │   └── jwt.ts
-│   └── index.js
+│   │   ├── jwt.ts
+│   │   └── prisma.ts
+│   └── prisma.config.ts
 ├── .env
+├── .gitignore
 ├── package.json
 └── tsconfig.json
 ```
