@@ -35,6 +35,7 @@ backend/
 ### 1. Setup Auth (Authentication & Authorization)
 ```txt
 1. work with app.ts
+2. work with cors.ts
 2. work with auth-route.ts (end-point for Register & Login)
 3. work with auth-controller.ts (handleRegister & handleLogin)
 4. work with joi.ts (registerSchema & loginSchema)
@@ -49,15 +50,42 @@ import cors from 'cors'
 import authRoute from './routes/auth-route'
 
 const app = express()
+const port = 3000;
 
 app.use(cors())
 app.use(express.json())
 
 app.use('/api/auth', authRoute)     // mount: POST /api/auth/register & /api/auth/login
 
+app.use('/health', (req, res) => {
+    res.send("Backend Health: Ok")
+})
+
+app.listen(
+    port,
+    () => { console.log(`Server running on http://localhost:${port}`) }
+);
+
 export default app
 ```
+`src/middlewares/cors.ts` — tell browsers which origins can read responses from your server.
+```ts
+import cors from 'cors';
 
+// this only works on frontend, cant test with postman
+const corsMiddleware = cors({
+    origin: ['http://localhost:5173', 'kilau.ai', ], // ganti dengan URL front-end kamu
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],  // set the allowed HTTP methods
+    credentials: true,                                  // allow credentials
+});
+
+export default corsMiddleware;
+```
+```bash
+npm i cors           # install cors to  tell browsers which origins can read responses from your server.
+npm i -D @types/cors
+```
 `src/routes/auth-route.ts` — define endpoints
 ```ts
 import { Router } from 'express'
@@ -106,11 +134,15 @@ export const verifyToken = (token: string) => {
   return jwt.verify(token, SECRET)   // throws if invalid/expired
 }
 ```
+```bash
+npm i jsonwebtoken
+npm i -D @types/jsonwebtoken
+```
 
 `src/models/auth-model.ts` — DB operations
 ```ts
 import prisma from '../utils/prisma'
-import bcrypt from 'bcryptjs'
+import bcrypt from 'bcrypt'
 
 export const registerUser = async (name: string, email: string, password: string, role: 'ADMIN' | 'BUYER') => {
   const hashed = await bcrypt.hash(password, 10)        // hash password before saving
@@ -128,6 +160,10 @@ export const loginUser = async (email: string, password: string) => {
 
   return user
 }
+```
+```bash
+npm i bcrypt
+npm i -D @types/bcrypt
 ```
 
 `src/controllers/auth-controller.ts` — handle req/res
