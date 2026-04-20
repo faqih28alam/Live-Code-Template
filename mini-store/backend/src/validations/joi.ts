@@ -13,3 +13,11 @@ export const loginSchema = Joi.object({
     email: Joi.string().email().required(),
     password: Joi.string().required(),
 })
+
+export const productSchema = Joi.object({
+    name: Joi.string().min(3).required(),
+    description: Joi.string().optional(),
+    price: Joi.number().positive().required(),
+    stock: Joi.number().integer().min(0).required(),
+    image: Joi.string().uri().optional(),
+})

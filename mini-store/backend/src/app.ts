@@ -1,6 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import authRoute from './routes/auth-route'
+import productRoute from './routes/product-route'
 
 const app = express()
 const port = 3000;
@@ -9,6 +10,7 @@ app.use(cors())
 app.use(express.json())
 
 app.use('/api/auth', authRoute)     // mount: POST /api/auth/register & /api/auth/login
+app.use('/api/products', productRoute)
 
 app.use('/health', (req, res) => {
     res.send("Backend Health: Ok")
