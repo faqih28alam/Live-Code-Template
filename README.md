@@ -38,222 +38,196 @@ backend/
 └── tsconfig.json
 ```
 
-## 🚀 Getting Started Day-3
-### 1. Setup Auth (Authentication & Authorization)
+## 🚀 Getting Started Day-4
+### 1. Flow Overview
 ```txt
-1. work with app.ts
-2. work with cors.ts
-2. work with auth-route.ts (end-point for Register & Login)
-3. work with auth-controller.ts (handleRegister & handleLogin)
-4. work with joi.ts (registerSchema & loginSchema)
-5. work with auth-model.ts (registerUser & loginUser)
-6. work with jwt.ts & bcrypt
+Request → product-route.ts → auth-middleware.ts (authenticate + authorizeAdmin) → product-controller.ts → joi.ts (validate) → product-model.ts (DB) → Response
 ```
 
-`src/app.ts` — mount auth route
-```ts
-import express from 'express'
-import cors from 'cors'
-import authRoute from './routes/auth-route'
-
-const app = express()
-const port = 3000;
-
-app.use(cors())
-app.use(express.json())
-
-app.use('/api/auth', authRoute)     // mount: POST /api/auth/register & /api/auth/login
-
-app.use('/health', (req, res) => {
-    res.send("Backend Health: Ok")
-})
-
-app.listen(
-    port,
-    () => { console.log(`Server running on http://localhost:${port}`) }
-);
-
-export default app
-```
-`src/middlewares/cors.ts` — tell browsers which origins can read responses from your server.
-```ts
-import cors from 'cors';
-
-// this only works on frontend, cant test with postman
-const corsMiddleware = cors({
-    origin: ['http://localhost:5173', 'kilau.ai', ], // ganti dengan URL front-end kamu
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization'],  // set the allowed HTTP methods
-    credentials: true,                                  // allow credentials
-});
-
-export default corsMiddleware;
-```
-```bash
-npm i cors           # install cors to  tell browsers which origins can read responses from your server.
-npm i -D @types/cors
-```
-`src/routes/auth-route.ts` — define endpoints
+### 2. `src/routes/product-route.ts` — define endpoints
 ```ts
 import { Router } from 'express'
-import { handleRegister, handleLogin } from '../controllers/auth-controller'
+import {
+  handleGetProducts,
+  handleGetProductById,
+  handleCreateProduct,
+  handleUpdateProduct,
+  handleDeleteProduct,
+} from '../controllers/product-controller'
+import { authenticate, authorizeAdmin } from '../middlewares/auth-middleware'
 
 const router = Router()
 
-router.post('/register', handleRegister)
-router.post('/login', handleLogin)
+router.get('/',     handleGetProducts)                                    // PUBLIC: all buyers & guests
+router.get('/:id',  handleGetProductById)                                 // PUBLIC: all buyers & guests
+router.post('/',    authenticate, authorizeAdmin, handleCreateProduct)    // ADMIN only
+router.put('/:id',  authenticate, authorizeAdmin, handleUpdateProduct)    // ADMIN only
+router.delete('/:id', authenticate, authorizeAdmin, handleDeleteProduct)  // ADMIN only
 
 export default router
 ```
 
-`src/validations/joi.ts` — validate request body
+### 3. `src/app.ts` — mount product route
 ```ts
-import Joi from 'joi'
+import express from 'express'
+import cors from 'cors'
+import authRoute from './routes/auth-route'
+import productRoute from './routes/product-route'
 
-export const registerSchema = Joi.object({
-  name:     Joi.string().required(),
-  email:    Joi.string().email().required(),
-  password: Joi.string().min(6).required(),
-  role:     Joi.string().valid('ADMIN', 'BUYER').default('BUYER'),
-})
+const app = express()
 
-export const loginSchema = Joi.object({
-  email:    Joi.string().email().required(),
-  password: Joi.string().required(),
-})
-```
-```bash
-npm i joi           # install joi for validation
-npm i -D @types/joi
+app.use(cors())
+app.use(express.json())
+
+app.use('/api/auth',     authRoute)
+app.use('/api/products', productRoute)
+
+export default app
 ```
 
-`src/utils/jwt.ts` — sign & verify token
+### 4. `src/validations/joi.ts` — add product schema
 ```ts
-import jwt from 'jsonwebtoken'
-
-const SECRET = process.env.JWT_SECRET as string
-
-export const signToken = (payload: object): string => {
-  return jwt.sign(payload, SECRET, { expiresIn: '1d' })
-}
-
-export const verifyToken = (token: string) => {
-  return jwt.verify(token, SECRET)   // throws if invalid/expired
-}
-```
-```bash
-npm i jsonwebtoken
-npm i -D @types/jsonwebtoken
+export const productSchema = Joi.object({
+  name:        Joi.string().required(),
+  description: Joi.string().optional(),
+  price:       Joi.number().positive().required(),
+  stock:       Joi.number().integer().min(0).required(),
+  image:       Joi.string().uri().optional(),
+})
 ```
 
-`src/models/auth-model.ts` — DB operations
+### 5. `src/models/product-model.ts` — DB operations
 ```ts
 import prisma from '../utils/prisma'
-import bcrypt from 'bcrypt'
 
-export const registerUser = async (name: string, email: string, password: string, role: 'ADMIN' | 'BUYER') => {
-  const hashed = await bcrypt.hash(password, 10)        // hash password before saving
-  return prisma.user.create({
-    data: { name, email, password: hashed, role },
-  })
+export const getProducts = async () => {
+  return prisma.product.findMany()
 }
 
-export const loginUser = async (email: string, password: string) => {
-  const user = await prisma.user.findUnique({ where: { email } })
-  if (!user) throw new Error('User not found')
+export const getProductById = async (id: number) => {
+  return prisma.product.findUnique({ where: { id } })
+}
 
-  const valid = await bcrypt.compare(password, user.password)   // compare plain vs hashed
-  if (!valid) throw new Error('Invalid password')
+export const createProduct = async (data: {
+  name: string
+  description?: string
+  price: number
+  stock: number
+  image?: string
+}) => {
+  return prisma.product.create({ data })
+}
 
-  return user
+export const updateProduct = async (id: number, data: {
+  name?: string
+  description?: string
+  price?: number
+  stock?: number
+  image?: string
+}) => {
+  return prisma.product.update({ where: { id }, data })
+}
+
+export const deleteProduct = async (id: number) => {
+  return prisma.product.delete({ where: { id } })
 }
 ```
-```bash
-npm i bcrypt
-npm i -D @types/bcrypt
-```
 
-`src/controllers/auth-controller.ts` — handle req/res
+### 6. `src/controllers/product-controller.ts` — handle req/res
 ```ts
 import { Request, Response } from 'express'
-import { registerSchema, loginSchema } from '../validations/joi'
-import { registerUser, loginUser } from '../models/auth-model'
-import { signToken } from '../utils/jwt'
+import { productSchema } from '../validations/joi'
+import {
+  getProducts,
+  getProductById,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+} from '../models/product-model'
 
-export const handleRegister = async (req: Request, res: Response) => {
-  const { error, value } = registerSchema.validate(req.body)
-  if (error) return res.status(400).json({ message: error.message })
-
+export const handleGetProducts = async (req: Request, res: Response) => {
   try {
-    const user = await registerUser(value.name, value.email, value.password, value.role)
-    res.status(201).json({ message: 'Register success', user })
+    const products = await getProducts()
+    res.status(200).json({ message: 'Success', products })
   } catch (err: any) {
-    res.status(400).json({ message: err.message })
+    res.status(500).json({ message: err.message })
   }
 }
 
-export const handleLogin = async (req: Request, res: Response) => {
-  const { error, value } = loginSchema.validate(req.body)
+export const handleGetProductById = async (req: Request, res: Response) => {
+  try {
+    const product = await getProductById(Number(req.params.id))
+    if (!product) return res.status(404).json({ message: 'Product not found' })
+    res.status(200).json({ message: 'Success', product })
+  } catch (err: any) {
+    res.status(500).json({ message: err.message })
+  }
+}
+
+export const handleCreateProduct = async (req: Request, res: Response) => {
+  const { error, value } = productSchema.validate(req.body)
   if (error) return res.status(400).json({ message: error.message })
 
   try {
-    const user = await loginUser(value.email, value.password)
-    const token = signToken({ id: user.id, role: user.role })   // embed role in token
-    res.status(200).json({ message: 'Login success', token })
+    const product = await createProduct(value)
+    res.status(201).json({ message: 'Product created', product })
   } catch (err: any) {
-    res.status(401).json({ message: err.message })
+    res.status(500).json({ message: err.message })
+  }
+}
+
+export const handleUpdateProduct = async (req: Request, res: Response) => {
+  const { error, value } = productSchema.validate(req.body)
+  if (error) return res.status(400).json({ message: error.message })
+
+  try {
+    const product = await updateProduct(Number(req.params.id), value)
+    res.status(200).json({ message: 'Product updated', product })
+  } catch (err: any) {
+    res.status(500).json({ message: err.message })
+  }
+}
+
+export const handleDeleteProduct = async (req: Request, res: Response) => {
+  try {
+    await deleteProduct(Number(req.params.id))
+    res.status(200).json({ message: 'Product deleted' })
+  } catch (err: any) {
+    res.status(500).json({ message: err.message })
   }
 }
 ```
 
-`src/middlewares/auth-middleware.ts` — protect routes
-```ts
-import { Request, Response, NextFunction } from 'express'
-import { verifyToken } from '../utils/jwt'
-
-export interface AuthRequest extends Request {
-  user?: any    // attach decoded token payload to req.user
-}
-
-export const authenticate = (req: AuthRequest, res: Response, next: NextFunction) => {
-  const token = req.headers.authorization?.split(' ')[1]  // Bearer 
-  if (!token) return res.status(401).json({ message: 'No token provided' })
-
-  try {
-    req.user = verifyToken(token)
-    next()
-  } catch {
-    res.status(401).json({ message: 'Invalid or expired token' })
-  }
-}
-
-export const authorizeAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
-  if (req.user?.role !== 'ADMIN') return res.status(403).json({ message: 'Admin only' })
-  next()
-}
+### 7. Install dependencies
+```bash
+npm i joi                 # already installed on Day-3, skip if done
 ```
 
 ---
 
-## 🔑 Key Concepts Day-3
+## 🔑 Key Concepts Day-4
 
 ```text
-bcrypt.hash()       → hash plain password before storing in DB
-bcrypt.compare()    → compare plain input vs stored hash
-jwt.sign()          → create token with payload + secret + expiry
-jwt.verify()        → decode & validate token (throws if invalid)
-Joi.validate()      → validate req.body shape before hitting DB
-authenticate        → middleware: checks token exists & is valid
-authorizeAdmin      → middleware: checks role === 'ADMIN' from token
-req.user            → custom field on Request to carry decoded token data
+router.get()            → public route, no middleware needed
+router.post/put/delete  → protected: always pass authenticate + authorizeAdmin
+authenticate            → verifies JWT token from Authorization header
+authorizeAdmin          → checks req.user.role === 'ADMIN'
+findMany()              → get all records
+findUnique()            → get one record by unique field (id)
+create()                → insert new record
+update()                → update record by id
+delete()                → delete record by id
+Number(req.params.id)   → params are strings by default, cast to number for Prisma
 ```
 
 ---
 
-## 🔗 Middleware Usage (preview for Day-4)
+## 🔗 API Endpoints Day-4
 
-```ts
-// how authenticate & authorizeAdmin will be used on routes:
-router.post('/products', authenticate, authorizeAdmin, handleCreateProduct)
-//                           ↑ check token       ↑ check role
+```text
+GET    /api/products        → PUBLIC  — get all products
+GET    /api/products/:id    → PUBLIC  — get product by id
+POST   /api/products        → ADMIN   — create product
+PUT    /api/products/:id    → ADMIN   — update product
+DELETE /api/products/:id    → ADMIN   — delete product
 ```
