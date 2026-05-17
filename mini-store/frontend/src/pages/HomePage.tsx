@@ -8,6 +8,8 @@ import { getProductsApi, type Product } from '@/api/products'
 import { addToCartApi } from '@/api/cart'
 import { useAuthStore } from '@/store/authStore'
 import { useCartStore } from '@/store/cartStore'
+import { Spinner } from '@/components/ui/spinner'
+import { ErrorMessage } from '@/components/ui/error-message'
 
 export default function HomePage() {
   const [products, setProducts] = useState<Product[]>([])
@@ -21,8 +23,8 @@ export default function HomePage() {
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <p className="text-muted-foreground">Loading products…</p>
-  if (error) return <p className="text-destructive">{error}</p>
+  if (loading) return <div className="flex justify-center py-16"><Spinner className="h-8 w-8" /></div>
+  if (error) return <ErrorMessage message={error} />
   if (products.length === 0) return <p className="text-muted-foreground">No products yet.</p>
 
   return (

@@ -1,13 +1,13 @@
 ```text
-Day 1: Project setup (folder structure, Express server, Prisma init, PostgreSQL connection)
-Day 2: Prisma schema (User, Product, Cart, CartItem models + migrations)
-Day 3: Auth (register/login, JWT, role-based middleware)
-Day 4: Product CRUD API (admin only for CUD, public READ)
-Day 5: Cart API (buyer: add, read, update, delete cart items)
-Day 6: React setup (Vite, Tailwind, ShadCN, folder structure, routing)
-Day 7: Auth UI (login/register pages, auth state with Zustand/Context)
-Day 8: Product UI (product list for buyer, full CRUD UI for admin)
-Day 9: Cart UI (cart page, add/remove/update items)
+Day 1:  Project setup (folder structure, Express server, Prisma init, PostgreSQL connection)
+Day 2:  Prisma schema (User, Product, Cart, CartItem models + migrations)
+Day 3:  Auth (register/login, JWT, role-based middleware)
+Day 4:  Product CRUD API (admin only for CUD, public READ)
+Day 5:  Cart API (buyer: add, read, update, delete cart items)
+Day 6:  React setup (Vite, Tailwind, ShadCN, folder structure, routing)
+Day 7:  Auth UI (login/register pages, auth state with Zustand/Context)
+Day 8:  Product UI (product list for buyer, full CRUD UI for admin)
+Day 9:  Cart UI (cart page, add/remove/update items)
 Day 10: Polish (role-based route guards, loading states, error handling)
 ```
 
@@ -17,131 +17,167 @@ mini-store/
 └── frontend/
     └── src/
         ├── api/
-        │   ├── client.ts
+        │   ├── client.ts            # axios + JWT interceptor + global 401 handler
         │   ├── auth.ts
         │   ├── products.ts
-        │   └── cart.ts              # getCart, addToCart, updateItem, removeItem, clearCart
+        │   └── cart.ts
         ├── store/
         │   ├── authStore.ts
-        │   └── cartStore.ts         # item count for navbar badge
-        ├── components/ui/
+        │   └── cartStore.ts
+        ├── components/
+        │   ├── ProtectedRoute.tsx   # guards by auth + role
+        │   ├── GuestRoute.tsx       # redirects logged-in users
+        │   └── ui/
+        │       ├── spinner.tsx      # loading spinner
+        │       ├── error-message.tsx
+        │       ├── button.tsx
+        │       ├── input.tsx
+        │       ├── label.tsx
+        │       ├── card.tsx
+        │       ├── badge.tsx
+        │       └── dialog.tsx
         ├── layouts/
-        │   └── RootLayout.tsx       # cart count badge on navbar icon
+        │   └── RootLayout.tsx
         └── pages/
-            ├── HomePage.tsx         # Add to Cart wired up
-            ├── CartPage.tsx         # full cart UI
-            ├── AdminProductsPage.tsx
+            ├── HomePage.tsx
             ├── LoginPage.tsx
-            └── RegisterPage.tsx
+            ├── RegisterPage.tsx
+            ├── CartPage.tsx
+            ├── AdminProductsPage.tsx
+            └── NotFoundPage.tsx     # 404
 ```
 
-## 🚀 Getting Started Day-9
+## 🚀 Getting Started Day-10
 
-### 1. Flow Overview
+### 1. What changed
 ```txt
-HomePage → Add to Cart → addToCartApi() → increment cartStore count → badge updates in navbar
-CartPage → getCartApi() → setCount(items.length) → render items
-         → +/- buttons → updateCartItemApi() → update local state
-         → trash icon  → removeCartItemApi() → filter item from list
-         → Clear Cart  → clearCartApi()      → empty items list
+App.tsx        → routes wrapped in ProtectedRoute / GuestRoute
+client.ts      → response interceptor: 401 → auto logout + redirect to /login
+All pages      → consistent Spinner on load, ErrorMessage on error
+CartPage.tsx   → fixed decrement() usage (removed direct getState() call)
 ```
 
-### 2. `src/api/cart.ts` — cart API calls
-```ts
-import api from './client'
-
-export const getCartApi    = async () => { const { data } = await api.get('/cart'); return data.cart }
-export const addToCartApi  = async (productId, quantity = 1) => { const { data } = await api.post('/cart/items', { productId, quantity }); return data.item }
-export const updateCartItemApi = async (itemId, quantity)   => { const { data } = await api.put(`/cart/items/${itemId}`, { quantity }); return data.item }
-export const removeCartItemApi = async (itemId) => api.delete(`/cart/items/${itemId}`)
-export const clearCartApi      = async ()       => api.delete('/cart')
-```
-
-### 3. `src/store/cartStore.ts` — count for navbar badge
-```ts
-import { create } from 'zustand'
-
-export const useCartStore = create((set) => ({
-  count: 0,
-  setCount:  (n) => set({ count: n }),
-  increment: ()  => set((s) => ({ count: s.count + 1 })),
-  decrement: ()  => set((s) => ({ count: Math.max(0, s.count - 1) })),
-}))
-```
-
-### 4. `src/pages/HomePage.tsx` — Add to Cart button
+### 2. Route Guards in `src/App.tsx`
 ```tsx
-const handleAddToCart = async () => {
-  if (!user) { navigate('/login'); return }   // redirect guests
+<Routes>
+  <Route element={<RootLayout />}>
+    <Route index element={<HomePage />} />               {/* public */}
 
-  setAdding(true)
-  await addToCartApi(product.id)
-  increment()                                  // update navbar badge
-  setAdded(true)
-  setTimeout(() => setAdded(false), 1500)      // flash "Added!" then reset
-  setAdding(false)
+    <Route element={<GuestRoute />}>                     {/* logged-in → redirect to / */}
+      <Route path="/login"    element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+    </Route>
+
+    <Route element={<ProtectedRoute role="BUYER" />}>    {/* unauthenticated → /login, ADMIN → / */}
+      <Route path="/cart" element={<CartPage />} />
+    </Route>
+
+    <Route element={<ProtectedRoute role="ADMIN" />}>    {/* unauthenticated → /login, BUYER → / */}
+      <Route path="/admin/products" element={<AdminProductsPage />} />
+    </Route>
+
+    <Route path="*" element={<NotFoundPage />} />        {/* 404 */}
+  </Route>
+</Routes>
+```
+
+### 3. `src/components/ProtectedRoute.tsx`
+```tsx
+export default function ProtectedRoute({ role }: { role?: 'ADMIN' | 'BUYER' }) {
+  const user = useAuthStore((s) => s.user)
+  if (!user) return <Navigate to="/login" replace />
+  if (role && user.role !== role) return <Navigate to="/" replace />
+  return <Outlet />
+}
+```
+
+### 4. `src/components/GuestRoute.tsx`
+```tsx
+export default function GuestRoute() {
+  const user = useAuthStore((s) => s.user)
+  if (user) return <Navigate to="/" replace />
+  return <Outlet />
+}
+```
+
+### 5. Global 401 handling in `src/api/client.ts`
+```ts
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      useAuthStore.getState().logout()   // clear token from store + localStorage
+      window.location.href = '/login'    // hard redirect (bypasses React Router)
+    }
+    return Promise.reject(error)
+  }
+)
+```
+
+### 6. Reusable loading & error components
+```tsx
+// src/components/ui/spinner.tsx
+export function Spinner({ className }) {
+  return <div className={cn('animate-spin rounded-full border-2 border-muted border-t-primary h-6 w-6', className)} />
 }
 
-// button label: "Add to Cart" → "Adding…" → "Added!" → "Add to Cart"
-// disabled when: out of stock, currently adding, or user is ADMIN
-```
-
-### 5. `src/pages/CartPage.tsx` — cart UI
-```tsx
-// load cart and sync count on mount
-useEffect(() => {
-  getCartApi().then((data) => {
-    setCart(data)
-    setCount(data?.items.length ?? 0)    // sync navbar badge
-  })
-}, [])
-
-// quantity controls: +/- buttons, min 1
-const updateQuantity = async (item, delta) => {
-  const newQty = item.quantity + delta
-  if (newQty < 1) return
-  const updated = await updateCartItemApi(item.id, newQty)
-  setCart((prev) => ({ ...prev, items: prev.items.map((i) => i.id === updated.id ? updated : i) }))
+// src/components/ui/error-message.tsx
+export function ErrorMessage({ message }) {
+  return (
+    <div className="rounded-md bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive">
+      {message}
+    </div>
+  )
 }
 
-// running total
-const total = cart.items.reduce((sum, i) => sum + i.product.price * i.quantity, 0)
-```
-
-### 6. `src/layouts/RootLayout.tsx` — cart badge
-```tsx
-const cartCount = useCartStore((s) => s.count)
-
-// in navbar:
-<Link to="/cart" className="relative">
-  <Button variant="ghost" size="icon"><ShoppingCart /></Button>
-  {cartCount > 0 && (
-    <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full h-5 w-5 flex items-center justify-center">
-      {cartCount}
-    </span>
-  )}
-</Link>
+// usage in any page:
+if (loading) return <div className="flex justify-center py-16"><Spinner className="h-8 w-8" /></div>
+if (error)   return <ErrorMessage message={error} />
 ```
 
 ---
 
-## 🔑 Key Concepts Day-9
+## 🔑 Key Concepts Day-10
 
 ```text
-cartStore (no persist)       → session-only state; rehydrated from API on CartPage mount
-setCount(items.length)       → sync store with server truth when CartPage loads
-increment()                  → optimistic update on add — feels instant without refetch
-prev.items.map(i => ...)     → immutable update: replace one cart item after quantity change
-prev.items.filter(...)       → immutable update: remove item after delete
-absolute -top-1 -right-1     → Tailwind trick for badge positioned over an icon
-disabled={user?.role==='ADMIN'} → admins can't add to cart (they manage products instead)
+<Navigate to="..." replace />     → redirect without adding to browser history
+<Outlet />                        → renders the matched child route (guard is a layout wrapper)
+role-based guard                  → same ProtectedRoute component, different role prop
+GuestRoute                        → prevents /login flash for already-authenticated users
+interceptors.response             → runs on every API response — ideal for global error handling
+useAuthStore.getState()           → access Zustand outside React (no hook, safe in interceptors)
+window.location.href              → hard redirect — ensures all React state is cleared cleanly
+401 vs 403                        → 401 = not authenticated (no/bad token), 403 = wrong role
+Spinner / ErrorMessage            → extract once, use everywhere — consistent UX without repetition
 ```
 
 ---
 
-## 🔗 Pages Day-9
+## ✅ Complete API Reference
 
+### Backend `http://localhost:3000`
 ```text
-/       → HomePage    — Add to Cart now fully wired (redirects guests to /login)
-/cart   → CartPage    — view items, update qty with +/-, remove, clear, running total
+POST   /api/auth/register           → register user
+POST   /api/auth/login              → login, returns JWT
+
+GET    /api/products                → public — list all products
+GET    /api/products/:id            → public — single product
+POST   /api/products                → ADMIN — create product
+PUT    /api/products/:id            → ADMIN — update product
+DELETE /api/products/:id            → ADMIN — delete product
+
+GET    /api/cart                    → BUYER — get cart with items
+POST   /api/cart/items              → BUYER — add item
+PUT    /api/cart/items/:itemId      → BUYER — update quantity
+DELETE /api/cart/items/:itemId      → BUYER — remove item
+DELETE /api/cart                    → BUYER — clear cart
+```
+
+### Frontend routes `http://localhost:5173`
+```text
+/                  → product grid (public)
+/login             → login form (guest only)
+/register          → register form (guest only)
+/cart              → cart page (BUYER only)
+/admin/products    → product CRUD (ADMIN only)
 ```

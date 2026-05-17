@@ -5,6 +5,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
+import { Spinner } from '@/components/ui/spinner'
+import { ErrorMessage } from '@/components/ui/error-message'
 import {
   getProductsApi,
   createProductApi,
@@ -85,7 +87,7 @@ export default function AdminProductsPage() {
       </div>
 
       {loading ? (
-        <p className="text-muted-foreground">Loading…</p>
+        <div className="flex justify-center py-16"><Spinner className="h-8 w-8" /></div>
       ) : products.length === 0 ? (
         <p className="text-muted-foreground">No products yet. Add one!</p>
       ) : (
@@ -135,7 +137,7 @@ export default function AdminProductsPage() {
             <DialogTitle>{editing ? 'Edit Product' : 'Add Product'}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4 mt-2">
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && <ErrorMessage message={error} />}
             {(
               [
                 { id: 'name', label: 'Name', type: 'text', required: true },

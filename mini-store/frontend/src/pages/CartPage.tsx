@@ -4,11 +4,13 @@ import { Trash2, Minus, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getCartApi, updateCartItemApi, removeCartItemApi, clearCartApi, type Cart, type CartItem } from '@/api/cart'
 import { useCartStore } from '@/store/cartStore'
+import { Spinner } from '@/components/ui/spinner'
 
 export default function CartPage() {
   const [cart, setCart] = useState<Cart | null>(null)
   const [loading, setLoading] = useState(true)
   const setCount = useCartStore((s) => s.setCount)
+  const decrement = useCartStore((s) => s.decrement)
 
   useEffect(() => {
     getCartApi()
@@ -34,7 +36,7 @@ export default function CartPage() {
     setCart((prev) =>
       prev ? { ...prev, items: prev.items.filter((i) => i.id !== itemId) } : prev
     )
-    setCount(useCartStore.getState().count - 1)
+    decrement()
   }
 
   const clearCart = async () => {
@@ -46,7 +48,7 @@ export default function CartPage() {
 
   const total = cart?.items.reduce((sum, i) => sum + i.product.price * i.quantity, 0) ?? 0
 
-  if (loading) return <p className="text-muted-foreground">Loading cart…</p>
+  if (loading) return <div className="flex justify-center py-16"><Spinner className="h-8 w-8" /></div>
 
   if (!cart || cart.items.length === 0) {
     return (

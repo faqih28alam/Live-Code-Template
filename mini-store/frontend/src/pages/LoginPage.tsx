@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { loginApi } from '@/api/auth'
 import { useAuthStore } from '@/store/authStore'
+import { ErrorMessage } from '@/components/ui/error-message'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -45,7 +46,7 @@ export default function LoginPage() {
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && <ErrorMessage message={error} />}
             <div className="space-y-1">
               <Label htmlFor="email">Email</Label>
               <Input

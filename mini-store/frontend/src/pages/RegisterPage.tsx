@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { registerApi } from '@/api/auth'
+import { ErrorMessage } from '@/components/ui/error-message'
 
 export default function RegisterPage() {
   const navigate = useNavigate()
@@ -48,7 +49,7 @@ export default function RegisterPage() {
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && <ErrorMessage message={error} />}
             {(
               [
                 { id: 'name', label: 'Name', type: 'text', placeholder: 'John' },
