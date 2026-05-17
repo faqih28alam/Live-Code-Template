@@ -1,0 +1,27 @@
+import 'dotenv/config'
+import express from 'express'
+import cors from 'cors'
+import authRoute from './routes/auth-route'
+import productRoute from './routes/product-route'
+import cartRoute from './routes/cart-route'
+
+const app = express()
+const port = 3000;
+
+app.use(cors())
+app.use(express.json())
+
+app.use('/api/auth', authRoute)     // mount: POST /api/auth/register & /api/auth/login
+app.use('/api/products', productRoute)
+app.use('/api/cart', cartRoute)
+
+app.use('/health', (req, res) => {
+    res.send("Backend Health: Ok")
+})
+
+app.listen(
+    port,
+    () => { console.log(`Server running on http://localhost:${port}`) }
+);
+
+export default app
