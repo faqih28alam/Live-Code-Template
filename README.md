@@ -19,124 +19,129 @@ mini-store/
         ├── api/
         │   ├── client.ts
         │   ├── auth.ts
-        │   └── products.ts          # getProducts, create, update, delete
+        │   ├── products.ts
+        │   └── cart.ts              # getCart, addToCart, updateItem, removeItem, clearCart
         ├── store/
-        │   └── authStore.ts
-        ├── components/ui/           # Button, Input, Label, Card, Badge, Dialog
+        │   ├── authStore.ts
+        │   └── cartStore.ts         # item count for navbar badge
+        ├── components/ui/
         ├── layouts/
-        │   └── RootLayout.tsx
+        │   └── RootLayout.tsx       # cart count badge on navbar icon
         └── pages/
-            ├── HomePage.tsx         # product grid (buyer)
-            ├── AdminProductsPage.tsx  # CRUD table + dialog (admin)
+            ├── HomePage.tsx         # Add to Cart wired up
+            ├── CartPage.tsx         # full cart UI
+            ├── AdminProductsPage.tsx
             ├── LoginPage.tsx
-            ├── RegisterPage.tsx
-            └── CartPage.tsx
+            └── RegisterPage.tsx
 ```
 
-## 🚀 Getting Started Day-8
+## 🚀 Getting Started Day-9
 
 ### 1. Flow Overview
 ```txt
-Buyer:  HomePage → getProductsApi() → product grid → Add to Cart (Day-9)
-Admin:  AdminProductsPage → getProductsApi() → table
-                          → Add Product button → Dialog form → createProductApi()
-                          → Edit button → Dialog form (pre-filled) → updateProductApi()
-                          → Delete button → confirm → deleteProductApi()
+HomePage → Add to Cart → addToCartApi() → increment cartStore count → badge updates in navbar
+CartPage → getCartApi() → setCount(items.length) → render items
+         → +/- buttons → updateCartItemApi() → update local state
+         → trash icon  → removeCartItemApi() → filter item from list
+         → Clear Cart  → clearCartApi()      → empty items list
 ```
 
-### 2. `src/api/products.ts` — product API calls
+### 2. `src/api/cart.ts` — cart API calls
 ```ts
 import api from './client'
 
-export interface Product {
-  id: number; name: string; description?: string
-  price: number; stock: number; image?: string
-}
-
-export const getProductsApi = async (): Promise<Product[]> => {
-  const { data } = await api.get('/products')
-  return data.products
-}
-
-export const createProductApi = async (payload: Omit<Product, 'id'>): Promise<Product> => {
-  const { data } = await api.post('/products', payload)
-  return data.product
-}
-
-export const updateProductApi = async (id: number, payload: Partial<Omit<Product, 'id'>>): Promise<Product> => {
-  const { data } = await api.put(`/products/${id}`, payload)
-  return data.product
-}
-
-export const deleteProductApi = async (id: number): Promise<void> => {
-  await api.delete(`/products/${id}`)
-}
+export const getCartApi    = async () => { const { data } = await api.get('/cart'); return data.cart }
+export const addToCartApi  = async (productId, quantity = 1) => { const { data } = await api.post('/cart/items', { productId, quantity }); return data.item }
+export const updateCartItemApi = async (itemId, quantity)   => { const { data } = await api.put(`/cart/items/${itemId}`, { quantity }); return data.item }
+export const removeCartItemApi = async (itemId) => api.delete(`/cart/items/${itemId}`)
+export const clearCartApi      = async ()       => api.delete('/cart')
 ```
 
-### 3. `src/pages/HomePage.tsx` — buyer product grid
-```tsx
-const [products, setProducts] = useState<Product[]>([])
+### 3. `src/store/cartStore.ts` — count for navbar badge
+```ts
+import { create } from 'zustand'
 
+export const useCartStore = create((set) => ({
+  count: 0,
+  setCount:  (n) => set({ count: n }),
+  increment: ()  => set((s) => ({ count: s.count + 1 })),
+  decrement: ()  => set((s) => ({ count: Math.max(0, s.count - 1) })),
+}))
+```
+
+### 4. `src/pages/HomePage.tsx` — Add to Cart button
+```tsx
+const handleAddToCart = async () => {
+  if (!user) { navigate('/login'); return }   // redirect guests
+
+  setAdding(true)
+  await addToCartApi(product.id)
+  increment()                                  // update navbar badge
+  setAdded(true)
+  setTimeout(() => setAdded(false), 1500)      // flash "Added!" then reset
+  setAdding(false)
+}
+
+// button label: "Add to Cart" → "Adding…" → "Added!" → "Add to Cart"
+// disabled when: out of stock, currently adding, or user is ADMIN
+```
+
+### 5. `src/pages/CartPage.tsx` — cart UI
+```tsx
+// load cart and sync count on mount
 useEffect(() => {
-  getProductsApi().then(setProducts)
+  getCartApi().then((data) => {
+    setCart(data)
+    setCount(data?.items.length ?? 0)    // sync navbar badge
+  })
 }, [])
 
-// render a grid of ProductCards
-// each card: image, name, description, price, stock badge, Add to Cart button
+// quantity controls: +/- buttons, min 1
+const updateQuantity = async (item, delta) => {
+  const newQty = item.quantity + delta
+  if (newQty < 1) return
+  const updated = await updateCartItemApi(item.id, newQty)
+  setCart((prev) => ({ ...prev, items: prev.items.map((i) => i.id === updated.id ? updated : i) }))
+}
+
+// running total
+const total = cart.items.reduce((sum, i) => sum + i.product.price * i.quantity, 0)
 ```
 
-### 4. `src/pages/AdminProductsPage.tsx` — admin CRUD pattern
+### 6. `src/layouts/RootLayout.tsx` — cart badge
 ```tsx
-const [products, setProducts] = useState<Product[]>([])
-const [open, setOpen] = useState(false)
-const [editing, setEditing] = useState<Product | null>(null)  // null = creating new
-const [form, setForm] = useState<ProductPayload>(EMPTY_FORM)
+const cartCount = useCartStore((s) => s.count)
 
-// open dialog for create
-const openCreate = () => { setEditing(null); setForm(EMPTY_FORM); setOpen(true) }
-
-// open dialog pre-filled for edit
-const openEdit = (p: Product) => { setEditing(p); setForm({ ...p }); setOpen(true) }
-
-// submit: branch on editing vs creating
-const handleSubmit = async (e) => {
-  if (editing) await updateProductApi(editing.id, form)
-  else         await createProductApi(form)
-}
-
-// delete with confirmation
-const handleDelete = async (id) => {
-  if (!confirm('Delete this product?')) return
-  await deleteProductApi(id)
-  setProducts((prev) => prev.filter((p) => p.id !== id))
-}
-```
-
-### 5. Install dependencies
-```bash
-npm install @radix-ui/react-dialog
+// in navbar:
+<Link to="/cart" className="relative">
+  <Button variant="ghost" size="icon"><ShoppingCart /></Button>
+  {cartCount > 0 && (
+    <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full h-5 w-5 flex items-center justify-center">
+      {cartCount}
+    </span>
+  )}
+</Link>
 ```
 
 ---
 
-## 🔑 Key Concepts Day-8
+## 🔑 Key Concepts Day-9
 
 ```text
-useEffect(() => { fetch() }, [])   → run once on mount to load data
-setProducts(prev => [...prev, x])  → immutable state update: add item
-setProducts(prev => prev.map(...)) → immutable update: replace one item by id
-setProducts(prev => prev.filter()) → immutable update: remove item by id
-editing === null                   → signals "create mode" vs "edit mode" in the same form
-Dialog open/onOpenChange           → controlled dialog — open state lives in parent
-confirm()                          → quick delete confirmation without a second modal
-line-clamp-2                       → Tailwind: truncate text to 2 lines with ellipsis
+cartStore (no persist)       → session-only state; rehydrated from API on CartPage mount
+setCount(items.length)       → sync store with server truth when CartPage loads
+increment()                  → optimistic update on add — feels instant without refetch
+prev.items.map(i => ...)     → immutable update: replace one cart item after quantity change
+prev.items.filter(...)       → immutable update: remove item after delete
+absolute -top-1 -right-1     → Tailwind trick for badge positioned over an icon
+disabled={user?.role==='ADMIN'} → admins can't add to cart (they manage products instead)
 ```
 
 ---
 
-## 🔗 Pages Day-8
+## 🔗 Pages Day-9
 
 ```text
-/                → HomePage         — public product grid, Add to Cart (enabled Day-9)
-/admin/products  → AdminProductsPage — full CRUD table with Dialog form (ADMIN only)
+/       → HomePage    — Add to Cart now fully wired (redirects guests to /login)
+/cart   → CartPage    — view items, update qty with +/-, remove, clear, running total
 ```

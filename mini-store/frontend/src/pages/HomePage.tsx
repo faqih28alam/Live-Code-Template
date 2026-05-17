@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { ShoppingCart } from 'lucide-react'
 import { Card, CardContent, CardFooter } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { getProductsApi, type Product } from '@/api/products'
+import { addToCartApi } from '@/api/cart'
+import { useAuthStore } from '@/store/authStore'
+import { useCartStore } from '@/store/cartStore'
 
 export default function HomePage() {
   const [products, setProducts] = useState<Product[]>([])
@@ -34,14 +38,30 @@ export default function HomePage() {
 }
 
 function ProductCard({ product }: { product: Product }) {
+  const user = useAuthStore((s) => s.user)
+  const increment = useCartStore((s) => s.increment)
+  const navigate = useNavigate()
+  const [adding, setAdding] = useState(false)
+  const [added, setAdded] = useState(false)
+
+  const handleAddToCart = async () => {
+    if (!user) { navigate('/login'); return }
+
+    setAdding(true)
+    try {
+      await addToCartApi(product.id)
+      increment()
+      setAdded(true)
+      setTimeout(() => setAdded(false), 1500)  // reset label after 1.5s
+    } finally {
+      setAdding(false)
+    }
+  }
+
   return (
     <Card className="flex flex-col">
       {product.image ? (
-        <img
-          src={product.image}
-          alt={product.name}
-          className="w-full h-40 object-cover rounded-t-lg"
-        />
+        <img src={product.image} alt={product.name} className="w-full h-40 object-cover rounded-t-lg" />
       ) : (
         <div className="w-full h-40 bg-muted rounded-t-lg flex items-center justify-center text-muted-foreground text-sm">
           No image
@@ -58,10 +78,13 @@ function ProductCard({ product }: { product: Product }) {
         </Badge>
       </CardContent>
       <CardFooter>
-        {/* Add to Cart wired in Day-9 */}
-        <Button className="w-full" disabled={product.stock === 0}>
+        <Button
+          className="w-full"
+          disabled={product.stock === 0 || adding || user?.role === 'ADMIN'}
+          onClick={handleAddToCart}
+        >
           <ShoppingCart className="h-4 w-4 mr-2" />
-          Add to Cart
+          {added ? 'Added!' : adding ? 'Adding…' : 'Add to Cart'}
         </Button>
       </CardFooter>
     </Card>
