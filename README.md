@@ -13,176 +13,142 @@ Day 10: Polish (role-based route guards, loading states, error handling)
 
 ```
 mini-store/
-├── backend/
-│   ├── prisma/
-│   │   └── schema.prisma
-│   ├── src/
-│   │   ├── app.ts
-│   │   ├── models/            # auth, product, cart
-│   │   ├── controllers/       # auth, product, cart
-│   │   ├── routes/            # auth, product, cart
-│   │   ├── middlewares/       # auth-middleware, cors
-│   │   ├── validations/
-│   │   │   └── joi.ts
-│   │   └── utils/             # jwt, prisma
-│   ├── package.json
-│   └── tsconfig.json
+├── backend/                         # Express + Prisma API
 └── frontend/
-    ├── src/
-    │   ├── components/
-    │   │   └── ui/            # ShadCN components (Button, ...)
-    │   ├── layouts/
-    │   │   └── RootLayout.tsx
-    │   ├── pages/
-    │   │   ├── HomePage.tsx
-    │   │   ├── LoginPage.tsx
-    │   │   ├── RegisterPage.tsx
-    │   │   ├── CartPage.tsx
-    │   │   └── AdminProductsPage.tsx
-    │   ├── lib/
-    │   │   └── utils.ts       # cn() helper
-    │   ├── App.tsx            # router setup
-    │   ├── main.tsx
-    │   └── index.css          # Tailwind v4 + ShadCN CSS vars
-    ├── components.json        # ShadCN config
-    ├── vite.config.ts
-    └── tsconfig.app.json
+    └── src/
+        ├── api/
+        │   ├── client.ts            # axios instance + JWT interceptor
+        │   └── auth.ts              # login / register API calls
+        ├── store/
+        │   └── authStore.ts         # Zustand auth store (persisted)
+        ├── components/ui/           # ShadCN: Button, Input, Label, Card
+        ├── layouts/
+        │   └── RootLayout.tsx       # navbar reflects auth state
+        ├── pages/
+        │   ├── LoginPage.tsx        # login form
+        │   ├── RegisterPage.tsx     # register form
+        │   ├── HomePage.tsx
+        │   ├── CartPage.tsx
+        │   └── AdminProductsPage.tsx
+        └── lib/utils.ts
 ```
 
-## 🚀 Getting Started Day-6
+## 🚀 Getting Started Day-7
 
-### 1. Stack
+### 1. Flow Overview
 ```txt
-Vite + React + TypeScript  →  bundler & dev server
-Tailwind CSS v4            →  utility-first styling
-ShadCN                     →  pre-built accessible UI components
-React Router v7            →  client-side routing
+Form submit → api/auth.ts (axios POST) → backend → token returned
+           → decode JWT payload (atob) → setAuth(user, token) in Zustand
+           → token persisted to localStorage → axios interceptor attaches it to all future requests
 ```
 
-### 2. Install & run
-```bash
-cd mini-store/frontend
-npm install
-npm run dev      # http://localhost:5173
-```
-
-### 3. `vite.config.ts` — Tailwind v4 plugin + path alias
+### 2. `src/store/authStore.ts` — Zustand auth state
 ```ts
-import tailwindcss from '@tailwindcss/vite'
-import path from 'path'
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 
-export default defineConfig({
-  plugins: [react(), tailwindcss()],
-  resolve: {
-    alias: { '@': path.resolve(__dirname, './src') },
-  },
+interface User { id: number; role: 'ADMIN' | 'BUYER'; name: string }
+
+interface AuthStore {
+  user: User | null
+  token: string | null
+  setAuth: (user: User, token: string) => void
+  logout: () => void
+}
+
+export const useAuthStore = create<AuthStore>()(
+  persist(
+    (set) => ({
+      user: null,
+      token: null,
+      setAuth: (user, token) => set({ user, token }),
+      logout: () => set({ user: null, token: null }),
+    }),
+    { name: 'auth' }   // saves to localStorage under key "auth"
+  )
+)
+```
+
+### 3. `src/api/client.ts` — axios instance with JWT interceptor
+```ts
+import axios from 'axios'
+
+const api = axios.create({ baseURL: 'http://localhost:3000/api' })
+
+api.interceptors.request.use((config) => {
+  const stored = localStorage.getItem('auth')
+  if (stored) {
+    const { state } = JSON.parse(stored)
+    if (state?.token) config.headers.Authorization = `Bearer ${state.token}`
+  }
+  return config
 })
+
+export default api
 ```
 
-### 4. `src/index.css` — Tailwind v4 + ShadCN theme
-```css
-@import "tailwindcss";
-
-/* ShadCN CSS variables */
-:root {
-  --background: 0 0% 100%;
-  --foreground: 222.2 84% 4.9%;
-  /* ... other tokens ... */
-}
-
-/* Register as Tailwind v4 theme tokens so bg-background, text-foreground etc work */
-@theme inline {
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
-  --color-border: hsl(var(--border));
-  /* ... */
-}
-```
-
-### 5. `src/lib/utils.ts` — ShadCN `cn()` helper
+### 4. `src/api/auth.ts` — login / register calls
 ```ts
-import { clsx, type ClassValue } from 'clsx'
-import { twMerge } from 'tailwind-merge'
+import api from './client'
 
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
+export const loginApi = async (payload: { email: string; password: string }) => {
+  const { data } = await api.post('/auth/login', payload)
+  return data as { token: string }
+}
+
+export const registerApi = async (payload: RegisterPayload) => {
+  const { data } = await api.post('/auth/register', payload)
+  return data
 }
 ```
 
-### 6. `src/App.tsx` — routing setup
+### 5. `src/pages/LoginPage.tsx` — login form pattern
 ```tsx
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import RootLayout from '@/layouts/RootLayout'
-import HomePage from '@/pages/HomePage'
-import LoginPage from '@/pages/LoginPage'
-import RegisterPage from '@/pages/RegisterPage'
-import CartPage from '@/pages/CartPage'
-import AdminProductsPage from '@/pages/AdminProductsPage'
-
-export default function App() {
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route element={<RootLayout />}>
-          <Route index element={<HomePage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route path="/cart" element={<CartPage />} />
-          <Route path="/admin/products" element={<AdminProductsPage />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
-  )
+const handleSubmit = async (e: FormEvent) => {
+  e.preventDefault()
+  try {
+    const { token } = await loginApi({ email, password })
+    // decode JWT payload without a library
+    const payload = JSON.parse(atob(token.split('.')[1]!))
+    setAuth({ id: payload.id, role: payload.role, name: payload.name }, token)
+    navigate('/')
+  } catch (err) {
+    setError(err.response?.data?.message ?? 'Login failed')
+  }
 }
 ```
 
-### 7. `src/layouts/RootLayout.tsx` — shared header with `<Outlet />`
+### 6. `src/layouts/RootLayout.tsx` — navbar reacts to auth state
 ```tsx
-import { Link, Outlet } from 'react-router-dom'
-import { Button } from '@/components/ui/button'
+const { user, logout } = useAuthStore()
 
-export default function RootLayout() {
-  return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b">
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-          <Link to="/" className="text-xl font-bold">Mini Store</Link>
-          <nav className="flex items-center gap-4">
-            {/* nav links */}
-          </nav>
-        </div>
-      </header>
-      <main className="max-w-6xl mx-auto px-4 py-8">
-        <Outlet />   {/* child routes render here */}
-      </main>
-    </div>
-  )
-}
+// logged out → show Login + Register buttons
+// logged in  → show username, role-based links, logout icon
+```
+
+### 7. Install dependencies
+```bash
+npm install zustand axios
 ```
 
 ---
 
-## 🔑 Key Concepts Day-6
+## 🔑 Key Concepts Day-7
 
 ```text
-@import "tailwindcss"        → Tailwind v4: no config file, just import in CSS
-@theme inline { }            → register CSS variables as Tailwind utility tokens
-cn()                         → merges Tailwind classes safely (clsx + tailwind-merge)
-components.json              → ShadCN config: tells CLI where to put components, which CSS to use
-<BrowserRouter>              → wraps the whole app to enable routing
-<Routes> + <Route>           → declarative route definitions
-<Outlet />                   → renders the matched child route inside a layout
-@/ alias                     → maps to src/ — use instead of long relative paths
+zustand / persist       → global state that survives page refresh (localStorage)
+useAuthStore(s => s.x)  → selector pattern — only re-renders when selected value changes
+atob(token.split('.')[1])  → decode JWT payload client-side — no library needed
+axios interceptor        → automatically attaches Authorization header to every request
+controlled input         → value + onChange on every <Input> — React owns the form state
+navigate('/')            → programmatic redirect after login
 ```
 
 ---
 
-## 🔗 Routes Day-6
+## 🔗 Pages Day-7
 
 ```text
-/                   → HomePage         (public)
-/login              → LoginPage        (public)
-/register           → RegisterPage     (public)
-/cart               → CartPage         (buyer, protected in Day-10)
-/admin/products     → AdminProductsPage (admin, protected in Day-10)
+/login     → LoginPage    — email + password form, redirects to / on success
+/register  → RegisterPage — full registration form, redirects to /login on success
 ```

@@ -1,8 +1,17 @@
-import { Link, Outlet } from 'react-router-dom'
+import { Link, Outlet, useNavigate } from 'react-router-dom'
+import { ShoppingCart, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { ShoppingCart } from 'lucide-react'
+import { useAuthStore } from '@/store/authStore'
 
 export default function RootLayout() {
+  const { user, logout } = useAuthStore()
+  const navigate = useNavigate()
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b">
@@ -10,14 +19,36 @@ export default function RootLayout() {
           <Link to="/" className="text-xl font-bold">Mini Store</Link>
           <nav className="flex items-center gap-4">
             <Link to="/" className="text-sm hover:underline">Products</Link>
-            <Link to="/cart">
-              <Button variant="ghost" size="icon">
-                <ShoppingCart className="h-5 w-5" />
-              </Button>
-            </Link>
-            <Link to="/login">
-              <Button variant="outline" size="sm">Login</Button>
-            </Link>
+
+            {user ? (
+              <>
+                {user.role === 'BUYER' && (
+                  <Link to="/cart">
+                    <Button variant="ghost" size="icon">
+                      <ShoppingCart className="h-5 w-5" />
+                    </Button>
+                  </Link>
+                )}
+                {user.role === 'ADMIN' && (
+                  <Link to="/admin/products" className="text-sm hover:underline">
+                    Manage Products
+                  </Link>
+                )}
+                <span className="text-sm text-muted-foreground">{user.name}</span>
+                <Button variant="ghost" size="icon" onClick={handleLogout}>
+                  <LogOut className="h-4 w-4" />
+                </Button>
+              </>
+            ) : (
+              <>
+                <Link to="/login">
+                  <Button variant="outline" size="sm">Login</Button>
+                </Link>
+                <Link to="/register">
+                  <Button size="sm">Register</Button>
+                </Link>
+              </>
+            )}
           </nav>
         </div>
       </header>
