@@ -13,142 +13,130 @@ Day 10: Polish (role-based route guards, loading states, error handling)
 
 ```
 mini-store/
-├── backend/                         # Express + Prisma API
+├── backend/
 └── frontend/
     └── src/
         ├── api/
-        │   ├── client.ts            # axios instance + JWT interceptor
-        │   └── auth.ts              # login / register API calls
+        │   ├── client.ts
+        │   ├── auth.ts
+        │   └── products.ts          # getProducts, create, update, delete
         ├── store/
-        │   └── authStore.ts         # Zustand auth store (persisted)
-        ├── components/ui/           # ShadCN: Button, Input, Label, Card
+        │   └── authStore.ts
+        ├── components/ui/           # Button, Input, Label, Card, Badge, Dialog
         ├── layouts/
-        │   └── RootLayout.tsx       # navbar reflects auth state
-        ├── pages/
-        │   ├── LoginPage.tsx        # login form
-        │   ├── RegisterPage.tsx     # register form
-        │   ├── HomePage.tsx
-        │   ├── CartPage.tsx
-        │   └── AdminProductsPage.tsx
-        └── lib/utils.ts
+        │   └── RootLayout.tsx
+        └── pages/
+            ├── HomePage.tsx         # product grid (buyer)
+            ├── AdminProductsPage.tsx  # CRUD table + dialog (admin)
+            ├── LoginPage.tsx
+            ├── RegisterPage.tsx
+            └── CartPage.tsx
 ```
 
-## 🚀 Getting Started Day-7
+## 🚀 Getting Started Day-8
 
 ### 1. Flow Overview
 ```txt
-Form submit → api/auth.ts (axios POST) → backend → token returned
-           → decode JWT payload (atob) → setAuth(user, token) in Zustand
-           → token persisted to localStorage → axios interceptor attaches it to all future requests
+Buyer:  HomePage → getProductsApi() → product grid → Add to Cart (Day-9)
+Admin:  AdminProductsPage → getProductsApi() → table
+                          → Add Product button → Dialog form → createProductApi()
+                          → Edit button → Dialog form (pre-filled) → updateProductApi()
+                          → Delete button → confirm → deleteProductApi()
 ```
 
-### 2. `src/store/authStore.ts` — Zustand auth state
-```ts
-import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
-
-interface User { id: number; role: 'ADMIN' | 'BUYER'; name: string }
-
-interface AuthStore {
-  user: User | null
-  token: string | null
-  setAuth: (user: User, token: string) => void
-  logout: () => void
-}
-
-export const useAuthStore = create<AuthStore>()(
-  persist(
-    (set) => ({
-      user: null,
-      token: null,
-      setAuth: (user, token) => set({ user, token }),
-      logout: () => set({ user: null, token: null }),
-    }),
-    { name: 'auth' }   // saves to localStorage under key "auth"
-  )
-)
-```
-
-### 3. `src/api/client.ts` — axios instance with JWT interceptor
-```ts
-import axios from 'axios'
-
-const api = axios.create({ baseURL: 'http://localhost:3000/api' })
-
-api.interceptors.request.use((config) => {
-  const stored = localStorage.getItem('auth')
-  if (stored) {
-    const { state } = JSON.parse(stored)
-    if (state?.token) config.headers.Authorization = `Bearer ${state.token}`
-  }
-  return config
-})
-
-export default api
-```
-
-### 4. `src/api/auth.ts` — login / register calls
+### 2. `src/api/products.ts` — product API calls
 ```ts
 import api from './client'
 
-export const loginApi = async (payload: { email: string; password: string }) => {
-  const { data } = await api.post('/auth/login', payload)
-  return data as { token: string }
+export interface Product {
+  id: number; name: string; description?: string
+  price: number; stock: number; image?: string
 }
 
-export const registerApi = async (payload: RegisterPayload) => {
-  const { data } = await api.post('/auth/register', payload)
-  return data
+export const getProductsApi = async (): Promise<Product[]> => {
+  const { data } = await api.get('/products')
+  return data.products
+}
+
+export const createProductApi = async (payload: Omit<Product, 'id'>): Promise<Product> => {
+  const { data } = await api.post('/products', payload)
+  return data.product
+}
+
+export const updateProductApi = async (id: number, payload: Partial<Omit<Product, 'id'>>): Promise<Product> => {
+  const { data } = await api.put(`/products/${id}`, payload)
+  return data.product
+}
+
+export const deleteProductApi = async (id: number): Promise<void> => {
+  await api.delete(`/products/${id}`)
 }
 ```
 
-### 5. `src/pages/LoginPage.tsx` — login form pattern
+### 3. `src/pages/HomePage.tsx` — buyer product grid
 ```tsx
-const handleSubmit = async (e: FormEvent) => {
-  e.preventDefault()
-  try {
-    const { token } = await loginApi({ email, password })
-    // decode JWT payload without a library
-    const payload = JSON.parse(atob(token.split('.')[1]!))
-    setAuth({ id: payload.id, role: payload.role, name: payload.name }, token)
-    navigate('/')
-  } catch (err) {
-    setError(err.response?.data?.message ?? 'Login failed')
-  }
+const [products, setProducts] = useState<Product[]>([])
+
+useEffect(() => {
+  getProductsApi().then(setProducts)
+}, [])
+
+// render a grid of ProductCards
+// each card: image, name, description, price, stock badge, Add to Cart button
+```
+
+### 4. `src/pages/AdminProductsPage.tsx` — admin CRUD pattern
+```tsx
+const [products, setProducts] = useState<Product[]>([])
+const [open, setOpen] = useState(false)
+const [editing, setEditing] = useState<Product | null>(null)  // null = creating new
+const [form, setForm] = useState<ProductPayload>(EMPTY_FORM)
+
+// open dialog for create
+const openCreate = () => { setEditing(null); setForm(EMPTY_FORM); setOpen(true) }
+
+// open dialog pre-filled for edit
+const openEdit = (p: Product) => { setEditing(p); setForm({ ...p }); setOpen(true) }
+
+// submit: branch on editing vs creating
+const handleSubmit = async (e) => {
+  if (editing) await updateProductApi(editing.id, form)
+  else         await createProductApi(form)
+}
+
+// delete with confirmation
+const handleDelete = async (id) => {
+  if (!confirm('Delete this product?')) return
+  await deleteProductApi(id)
+  setProducts((prev) => prev.filter((p) => p.id !== id))
 }
 ```
 
-### 6. `src/layouts/RootLayout.tsx` — navbar reacts to auth state
-```tsx
-const { user, logout } = useAuthStore()
-
-// logged out → show Login + Register buttons
-// logged in  → show username, role-based links, logout icon
-```
-
-### 7. Install dependencies
+### 5. Install dependencies
 ```bash
-npm install zustand axios
+npm install @radix-ui/react-dialog
 ```
 
 ---
 
-## 🔑 Key Concepts Day-7
+## 🔑 Key Concepts Day-8
 
 ```text
-zustand / persist       → global state that survives page refresh (localStorage)
-useAuthStore(s => s.x)  → selector pattern — only re-renders when selected value changes
-atob(token.split('.')[1])  → decode JWT payload client-side — no library needed
-axios interceptor        → automatically attaches Authorization header to every request
-controlled input         → value + onChange on every <Input> — React owns the form state
-navigate('/')            → programmatic redirect after login
+useEffect(() => { fetch() }, [])   → run once on mount to load data
+setProducts(prev => [...prev, x])  → immutable state update: add item
+setProducts(prev => prev.map(...)) → immutable update: replace one item by id
+setProducts(prev => prev.filter()) → immutable update: remove item by id
+editing === null                   → signals "create mode" vs "edit mode" in the same form
+Dialog open/onOpenChange           → controlled dialog — open state lives in parent
+confirm()                          → quick delete confirmation without a second modal
+line-clamp-2                       → Tailwind: truncate text to 2 lines with ellipsis
 ```
 
 ---
 
-## 🔗 Pages Day-7
+## 🔗 Pages Day-8
 
 ```text
-/login     → LoginPage    — email + password form, redirects to / on success
-/register  → RegisterPage — full registration form, redirects to /login on success
+/                → HomePage         — public product grid, Add to Cart (enabled Day-9)
+/admin/products  → AdminProductsPage — full CRUD table with Dialog form (ADMIN only)
 ```
