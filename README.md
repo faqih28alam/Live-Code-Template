@@ -12,234 +12,177 @@ Day 10: Polish (role-based route guards, loading states, error handling)
 ```
 
 ```
-backend/
-├── prisma/
-│   └── schema.prisma       
-├── src/
-│   ├── app.ts
-│   ├── models/
-│   │   ├── auth-model.ts
-│   │   ├── product-model.ts
-│   │   └── cart-model.ts
-│   ├── controllers/
-│   │   ├── auth-controller.ts
-│   │   ├── product-controller.ts
-│   │   └── cart-controller.ts
-│   ├── routes/
-│   │   ├── auth-route.ts
-│   │   ├── product-route.ts
-│   │   └── cart-route.ts
-│   ├── middlewares/
-│   │   ├── auth-middleware.ts
-│   │   └── cors.ts
-│   ├── validations/
-│   │   └── joi.ts       
-│   ├── utils/
-│   │   ├── jwt.ts
-│   │   └── prisma.ts
-│   └── prisma.config.ts
-├── .env
-├── .gitignore
-├── package.json
-└── tsconfig.json
+mini-store/
+├── backend/
+│   ├── prisma/
+│   │   └── schema.prisma
+│   ├── src/
+│   │   ├── app.ts
+│   │   ├── models/            # auth, product, cart
+│   │   ├── controllers/       # auth, product, cart
+│   │   ├── routes/            # auth, product, cart
+│   │   ├── middlewares/       # auth-middleware, cors
+│   │   ├── validations/
+│   │   │   └── joi.ts
+│   │   └── utils/             # jwt, prisma
+│   ├── package.json
+│   └── tsconfig.json
+└── frontend/
+    ├── src/
+    │   ├── components/
+    │   │   └── ui/            # ShadCN components (Button, ...)
+    │   ├── layouts/
+    │   │   └── RootLayout.tsx
+    │   ├── pages/
+    │   │   ├── HomePage.tsx
+    │   │   ├── LoginPage.tsx
+    │   │   ├── RegisterPage.tsx
+    │   │   ├── CartPage.tsx
+    │   │   └── AdminProductsPage.tsx
+    │   ├── lib/
+    │   │   └── utils.ts       # cn() helper
+    │   ├── App.tsx            # router setup
+    │   ├── main.tsx
+    │   └── index.css          # Tailwind v4 + ShadCN CSS vars
+    ├── components.json        # ShadCN config
+    ├── vite.config.ts
+    └── tsconfig.app.json
 ```
 
-## 🚀 Getting Started Day-5
+## 🚀 Getting Started Day-6
 
-### 1. Flow Overview
+### 1. Stack
 ```txt
-Request → cart-route.ts → authenticate → authorizeRole('BUYER') → cart-controller.ts → joi.ts (validate) → cart-model.ts (DB) → Response
+Vite + React + TypeScript  →  bundler & dev server
+Tailwind CSS v4            →  utility-first styling
+ShadCN                     →  pre-built accessible UI components
+React Router v7            →  client-side routing
 ```
 
-### 2. `src/middlewares/auth-middleware.ts` — add `authorizeRole`
-```ts
-// generic role guard — replaces hardcoded authorizeAdmin for new routes
-export const authorizeRole = (role: 'ADMIN' | 'BUYER') => {
-  return (req: AuthRequest, res: Response, next: NextFunction) => {
-    if (req.user?.role !== role) return res.status(403).json({ message: `${role} only` })
-    next()
-  }
-}
+### 2. Install & run
+```bash
+cd mini-store/frontend
+npm install
+npm run dev      # http://localhost:5173
 ```
 
-### 3. `src/validations/joi.ts` — add cart schemas
+### 3. `vite.config.ts` — Tailwind v4 plugin + path alias
 ```ts
-export const cartItemSchema = Joi.object({
-  productId: Joi.number().integer().positive().required(),
-  quantity:  Joi.number().integer().min(1).default(1),
+import tailwindcss from '@tailwindcss/vite'
+import path from 'path'
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: { '@': path.resolve(__dirname, './src') },
+  },
 })
-
-export const updateCartItemSchema = Joi.object({
-  quantity: Joi.number().integer().min(1).required(),
-})
 ```
 
-### 4. `src/models/cart-model.ts` — DB operations
-```ts
-import prisma from '../utils/prisma'
+### 4. `src/index.css` — Tailwind v4 + ShadCN theme
+```css
+@import "tailwindcss";
 
-export const getOrCreateCart = async (userId: number) => {
-  return prisma.cart.upsert({
-    where: { userId },
-    create: { userId },
-    update: {},
-    include: { items: { include: { product: true } } },
-  })
+/* ShadCN CSS variables */
+:root {
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
+  /* ... other tokens ... */
 }
 
-export const getCartByUserId = async (userId: number) => {
-  return prisma.cart.findUnique({
-    where: { userId },
-    include: { items: { include: { product: true } } },
-  })
-}
-
-export const addCartItem = async (userId: number, productId: number, quantity: number) => {
-  const cart = await getOrCreateCart(userId)
-  const existing = await prisma.cartItem.findFirst({ where: { cartId: cart.id, productId } })
-
-  if (existing) {
-    return prisma.cartItem.update({
-      where: { id: existing.id },
-      data: { quantity: existing.quantity + quantity },
-      include: { product: true },
-    })
-  }
-
-  return prisma.cartItem.create({
-    data: { cartId: cart.id, productId, quantity },
-    include: { product: true },
-  })
-}
-
-export const updateCartItem = async (itemId: number, userId: number, quantity: number) => {
-  const item = await prisma.cartItem.findFirst({ where: { id: itemId, cart: { userId } } })
-  if (!item) return null
-  return prisma.cartItem.update({ where: { id: itemId }, data: { quantity }, include: { product: true } })
-}
-
-export const removeCartItem = async (itemId: number, userId: number) => {
-  const item = await prisma.cartItem.findFirst({ where: { id: itemId, cart: { userId } } })
-  if (!item) return null
-  return prisma.cartItem.delete({ where: { id: itemId } })
-}
-
-export const clearCart = async (userId: number) => {
-  const cart = await prisma.cart.findUnique({ where: { userId } })
-  if (!cart) return null
-  return prisma.cartItem.deleteMany({ where: { cartId: cart.id } })
+/* Register as Tailwind v4 theme tokens so bg-background, text-foreground etc work */
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-border: hsl(var(--border));
+  /* ... */
 }
 ```
 
-### 5. `src/controllers/cart-controller.ts` — handle req/res
+### 5. `src/lib/utils.ts` — ShadCN `cn()` helper
 ```ts
-import { Response } from 'express'
-import { AuthRequest } from '../middlewares/auth-middleware'
-import { cartItemSchema, updateCartItemSchema } from '../validations/joi'
-import { getCartByUserId, addCartItem, updateCartItem, removeCartItem, clearCart } from '../models/cart-model'
+import { clsx, type ClassValue } from 'clsx'
+import { twMerge } from 'tailwind-merge'
 
-export const handleGetCart = async (req: AuthRequest, res: Response) => {
-  try {
-    const cart = await getCartByUserId(req.user.id)
-    res.status(200).json({ message: 'Success', cart })
-  } catch (err: any) {
-    res.status(500).json({ message: err.message })
-  }
-}
-
-export const handleAddCartItem = async (req: AuthRequest, res: Response) => {
-  const { error, value } = cartItemSchema.validate(req.body)
-  if (error) return res.status(400).json({ message: error.message })
-
-  try {
-    const item = await addCartItem(req.user.id, value.productId, value.quantity)
-    res.status(201).json({ message: 'Item added to cart', item })
-  } catch (err: any) {
-    res.status(500).json({ message: err.message })
-  }
-}
-
-export const handleUpdateCartItem = async (req: AuthRequest, res: Response) => {
-  const { error, value } = updateCartItemSchema.validate(req.body)
-  if (error) return res.status(400).json({ message: error.message })
-
-  try {
-    const item = await updateCartItem(Number(req.params.itemId), req.user.id, value.quantity)
-    if (!item) return res.status(404).json({ message: 'Cart item not found' })
-    res.status(200).json({ message: 'Cart item updated', item })
-  } catch (err: any) {
-    res.status(500).json({ message: err.message })
-  }
-}
-
-export const handleRemoveCartItem = async (req: AuthRequest, res: Response) => {
-  try {
-    const item = await removeCartItem(Number(req.params.itemId), req.user.id)
-    if (!item) return res.status(404).json({ message: 'Cart item not found' })
-    res.status(200).json({ message: 'Cart item removed' })
-  } catch (err: any) {
-    res.status(500).json({ message: err.message })
-  }
-}
-
-export const handleClearCart = async (req: AuthRequest, res: Response) => {
-  try {
-    await clearCart(req.user.id)
-    res.status(200).json({ message: 'Cart cleared' })
-  } catch (err: any) {
-    res.status(500).json({ message: err.message })
-  }
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
 }
 ```
 
-### 6. `src/routes/cart-route.ts` — define endpoints
-```ts
-import { Router } from 'express'
-import { handleGetCart, handleAddCartItem, handleUpdateCartItem, handleRemoveCartItem, handleClearCart } from '../controllers/cart-controller'
-import { authenticate, authorizeRole } from '../middlewares/auth-middleware'
+### 6. `src/App.tsx` — routing setup
+```tsx
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import RootLayout from '@/layouts/RootLayout'
+import HomePage from '@/pages/HomePage'
+import LoginPage from '@/pages/LoginPage'
+import RegisterPage from '@/pages/RegisterPage'
+import CartPage from '@/pages/CartPage'
+import AdminProductsPage from '@/pages/AdminProductsPage'
 
-const router = Router()
-
-router.use(authenticate, authorizeRole('BUYER'))  // all cart routes: buyers only
-
-router.get('/',                   handleGetCart)          // GET    /api/cart
-router.post('/items',             handleAddCartItem)       // POST   /api/cart/items
-router.put('/items/:itemId',      handleUpdateCartItem)    // PUT    /api/cart/items/:itemId
-router.delete('/items/:itemId',   handleRemoveCartItem)    // DELETE /api/cart/items/:itemId
-router.delete('/',                handleClearCart)         // DELETE /api/cart
-
-export default router
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route element={<RootLayout />}>
+          <Route index element={<HomePage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/cart" element={<CartPage />} />
+          <Route path="/admin/products" element={<AdminProductsPage />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
+  )
+}
 ```
 
-### 7. `src/app.ts` — mount cart route
-```ts
-import cartRoute from './routes/cart-route'
+### 7. `src/layouts/RootLayout.tsx` — shared header with `<Outlet />`
+```tsx
+import { Link, Outlet } from 'react-router-dom'
+import { Button } from '@/components/ui/button'
 
-app.use('/api/cart', cartRoute)
+export default function RootLayout() {
+  return (
+    <div className="min-h-screen bg-background">
+      <header className="border-b">
+        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+          <Link to="/" className="text-xl font-bold">Mini Store</Link>
+          <nav className="flex items-center gap-4">
+            {/* nav links */}
+          </nav>
+        </div>
+      </header>
+      <main className="max-w-6xl mx-auto px-4 py-8">
+        <Outlet />   {/* child routes render here */}
+      </main>
+    </div>
+  )
+}
 ```
 
 ---
 
-## 🔑 Key Concepts Day-5
+## 🔑 Key Concepts Day-6
 
 ```text
-upsert()               → create if not exists, update if exists (used for auto-creating cart)
-findFirst()            → find one record matching any condition (not just unique fields)
-deleteMany()           → delete multiple records at once (used for clearCart)
-include: { product }   → eager-load related product data in the response
-router.use(middleware) → apply middleware to ALL routes in this router
-authorizeRole('BUYER') → generic role guard, reusable for any role
-cart: { userId }       → nested where filter: find item WHERE cart.userId = x (ownership check)
+@import "tailwindcss"        → Tailwind v4: no config file, just import in CSS
+@theme inline { }            → register CSS variables as Tailwind utility tokens
+cn()                         → merges Tailwind classes safely (clsx + tailwind-merge)
+components.json              → ShadCN config: tells CLI where to put components, which CSS to use
+<BrowserRouter>              → wraps the whole app to enable routing
+<Routes> + <Route>           → declarative route definitions
+<Outlet />                   → renders the matched child route inside a layout
+@/ alias                     → maps to src/ — use instead of long relative paths
 ```
 
 ---
 
-## 🔗 API Endpoints Day-5
+## 🔗 Routes Day-6
 
 ```text
-GET    /api/cart                  → BUYER — get cart with all items
-POST   /api/cart/items            → BUYER — add item (auto-increments if already in cart)
-PUT    /api/cart/items/:itemId    → BUYER — update item quantity
-DELETE /api/cart/items/:itemId    → BUYER — remove single item
-DELETE /api/cart                  → BUYER — clear entire cart
+/                   → HomePage         (public)
+/login              → LoginPage        (public)
+/register           → RegisterPage     (public)
+/cart               → CartPage         (buyer, protected in Day-10)
+/admin/products     → AdminProductsPage (admin, protected in Day-10)
 ```
