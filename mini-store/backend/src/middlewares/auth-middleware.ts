@@ -21,3 +21,10 @@ export const authorizeAdmin = (req: AuthRequest, res: Response, next: NextFuncti
     if (req.user?.role !== 'ADMIN') return res.status(403).json({ message: 'Admin only' })
     next()
 }
+
+export const authorizeRole = (role: 'ADMIN' | 'BUYER') => {
+    return (req: AuthRequest, res: Response, next: NextFunction) => {
+        if (req.user?.role !== role) return res.status(403).json({ message: `${role} only` })
+        next()
+    }
+}
