@@ -21,3 +21,9 @@ export const productSchema = Joi.object({
     stock: Joi.number().integer().min(0).required(),
     image: Joi.string().uri().optional(),
 })
+
+// PUT allows partial updates — only validate fields that are present
+export const updateProductSchema = productSchema.fork(
+    ['name', 'price', 'stock'],
+    (field) => field.optional()
+)

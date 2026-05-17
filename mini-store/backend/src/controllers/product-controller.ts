@@ -1,5 +1,5 @@
 import { Request, Response } from 'express'
-import { productSchema } from '../validations/joi'
+import { productSchema, updateProductSchema } from '../validations/joi'
 import {
     getProducts,
     getProductById,
@@ -40,7 +40,7 @@ export const handleCreateProduct = async (req: Request, res: Response) => {
 }
 
 export const handleUpdateProduct = async (req: Request, res: Response) => {
-    const { error, value } = productSchema.validate(req.body)
+    const { error, value } = updateProductSchema.validate(req.body)
     if (error) return res.status(400).json({ message: error.message })
 
     try {
